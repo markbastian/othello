@@ -15,7 +15,7 @@
   :plugins [[lein-figwheel "0.5.2"]
             [lein-cljsbuild "1.1.3" :exclusions [[org.clojure/clojure]]]]
 
-  :main othello.launcher
+  ;:main othello.launcher
 
   :clean-targets ^{:protect false} ["resources/public/js/compiled" "target"]
 
