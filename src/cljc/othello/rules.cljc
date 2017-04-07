@@ -77,7 +77,6 @@
   (mapv turn-summary (nth (deep-search state) n)))
 
 (defn utility [score player]
-  (prn "U")
   (- (player score) (-> player other-player score)))
 
 (defn minimax
@@ -93,41 +92,44 @@
   ([{:keys [player] :as initial-state} max-depth]
    (minimax initial-state player true [] max-depth)))
 
-(defn ab
+(def pinf #?(:clj Double/POSITIVE_INFINITY :cljs js/Number.POSITIVE_INFINITY))
+(def ninf #?(:clj Double/NEGATIVE_INFINITY :cljs js/Number.NEGATIVE_INFINITY))
+
+(defn alphabeta
   ([{:keys [valid-moves score] :as state} player alpha beta maximizing? decision-vec max-depth]
-   (if (or (game-over? state) (> (count decision-vec) max-depth))
-     (conj decision-vec (utility score player))
-     (loop [[[c] & r] (seq valid-moves) a alpha b beta res [#?(:clj Double/NEGATIVE_INFINITY :cljs Number/NEGATIVE_INFINITY)]]
-       (let [n (ab (take-space state c) player alpha beta (not maximizing?) (conj decision-vec c) max-depth)
-             v (peek n)]
-         (prn [c res])
-         (cond
-           (or (empty? r) (<= b a)) res
-           maximizing? (recur r (max a v) b (if (> v (peek res)) n res))
-           :default (recur r a (min b v) (if (< v (peek res)) n res)))))))
+   (cond
+     (or (game-over? state) (> (count decision-vec) max-depth)) (conj decision-vec (utility score player))
+     maximizing? (reduce (fn [v [c]]
+                           (let [x (alphabeta (take-space state c) player (max alpha (peek v)) beta (not maximizing?) (conj decision-vec c) max-depth)
+                                 vn (max-key peek v x)]
+                             (if (<= beta (max alpha (peek vn))) (reduced vn) vn)))
+                         [ninf] valid-moves)
+     :default (reduce (fn [v [c]]
+                        (let [x (alphabeta (take-space state c) player alpha (min beta (peek v)) (not maximizing?) (conj decision-vec c) max-depth)
+                              vn (min-key peek v x)]
+                          (if (<= (min beta (peek vn)) alpha) (reduced vn) vn)))
+                      [[pinf] beta] valid-moves)))
   ([{:keys [player] :as initial-state} max-depth]
-   (ab
-     initial-state
-     player
-     #?(:clj Double/NEGATIVE_INFINITY :cljs Number/NEGATIVE_INFINITY)
-     #?(:clj Double/POSITIVE_INFINITY :cljs Number/POSITIVE_INFINITY)
-     true [] max-depth)))
+   (alphabeta initial-state player ninf pinf true [] max-depth)))
 
-#_(defn minimax-ab [{:keys [player] :as initial-state} max-depth]
-  (letfn [(mini [state alpha beta decision-vec]
-            (mmf-ab maxi :min state player decision-vec alpha beta max-depth))
-          (maxi [state alpha beta decision-vec]
-            (mmf-ab mini :max state player decision-vec alpha beta max-depth))]
-    (maxi initial-state
-          #?(:clj Double/NEGATIVE_INFINITY :cljs Number/NEGATIVE_INFINITY)
-          #?(:clj Double/POSITIVE_INFINITY :cljs Number/POSITIVE_INFINITY) [])))
 
-(defn breadth-first-search [{:keys [player] :as state} depth]
-  (let [m (->> (lookahead state depth)
-               (mapv (juxt (comp first rest) peek))
-               (group-by first))]
-    (->
-      (apply min-key val
-           (zipmap (keys m)
-                   (map #(apply min (map (comp player second) %)) (vals m))))
-      first second)))
+#_(defn alphabeta
+  ([{:keys [valid-moves score] :as state} player alpha beta maximizing? decision-vec max-depth]
+   (cond
+     (or (game-over? state) (> (count decision-vec) max-depth)) (conj decision-vec (utility score player))
+     maximizing? (first
+                   (reduce (fn [[v a] [c]]
+                             (let [x (alphabeta (take-space state c) player a beta (not maximizing?) (conj decision-vec c) max-depth)
+                                   vn (max-key peek v x)
+                                   an (max a (peek vn))]
+                               (if (<= beta an) (reduced [vn an]) [vn an])))
+                           [[ninf] alpha] valid-moves))
+     :default (first
+                (reduce (fn [[v b] [c]]
+                          (let [x (alphabeta (take-space state c) player alpha b (not maximizing?) (conj decision-vec c) max-depth)
+                                vn (min-key peek v x)
+                                bn (min beta (peek vn))]
+                            (if (<= bn alpha) (reduced [vn bn]) [vn bn])))
+                        [[pinf] beta] valid-moves))))
+  ([{:keys [player] :as initial-state} max-depth]
+   (alphabeta initial-state player ninf pinf true [] max-depth)))

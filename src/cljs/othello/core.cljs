@@ -10,8 +10,8 @@
 
 (defn move-with-ai [is c]
   (let [s (rules/take-space is c)
-        bc (rules/minimax s 2)
         ;bc (rules/minimax s 2)
+        bc (rules/alphabeta s 2)
         ]
     (.log js/console bc)
     (rules/take-space s (first bc))))
