@@ -76,18 +76,51 @@
 (defn lookahead [state n]
   (mapv turn-summary (nth (deep-search state) n)))
 
-(defn utility [score player] (- (player score) (-> player other-player score)))
+(defn utility [score player]
+  (prn "U")
+  (- (player score) (-> player other-player score)))
 
-(defn mmf
-  [f m {:keys [valid-moves score] :as state} player decision-vec max-depth]
-  (if (or (game-over? state) (> (count decision-vec) max-depth))
-    (conj decision-vec (utility score player))
-    (apply m peek (for [[c] valid-moves] (f (take-space state c) (conj decision-vec c))))))
+(defn minimax
+  ([{:keys [valid-moves score] :as state} player maximizing? decision-vec max-depth]
+   (if (or (game-over? state) (> (count decision-vec) max-depth))
+     (conj decision-vec (utility score player))
+     (let [obj-fn (if maximizing? max-key min-key)
+           moves (for [[c] valid-moves]
+                   (minimax (take-space state c)
+                            player (not maximizing?)
+                            (conj decision-vec c) max-depth))]
+       (apply obj-fn peek moves))))
+  ([{:keys [player] :as initial-state} max-depth]
+   (minimax initial-state player true [] max-depth)))
 
-(defn minimax [{:keys [player] :as initial-state} max-depth]
-  (letfn [(mini [state decision-vec] (mmf maxi min-key state player decision-vec max-depth))
-          (maxi [state decision-vec] (mmf mini max-key state player decision-vec max-depth))]
-    (maxi initial-state [])))
+(defn ab
+  ([{:keys [valid-moves score] :as state} player alpha beta maximizing? decision-vec max-depth]
+   (if (or (game-over? state) (> (count decision-vec) max-depth))
+     (conj decision-vec (utility score player))
+     (loop [[[c] & r] (seq valid-moves) a alpha b beta res [#?(:clj Double/NEGATIVE_INFINITY :cljs Number/NEGATIVE_INFINITY)]]
+       (let [n (ab (take-space state c) player alpha beta (not maximizing?) (conj decision-vec c) max-depth)
+             v (peek n)]
+         (prn [c res])
+         (cond
+           (or (empty? r) (<= b a)) res
+           maximizing? (recur r (max a v) b (if (> v (peek res)) n res))
+           :default (recur r a (min b v) (if (< v (peek res)) n res)))))))
+  ([{:keys [player] :as initial-state} max-depth]
+   (ab
+     initial-state
+     player
+     #?(:clj Double/NEGATIVE_INFINITY :cljs Number/NEGATIVE_INFINITY)
+     #?(:clj Double/POSITIVE_INFINITY :cljs Number/POSITIVE_INFINITY)
+     true [] max-depth)))
+
+#_(defn minimax-ab [{:keys [player] :as initial-state} max-depth]
+  (letfn [(mini [state alpha beta decision-vec]
+            (mmf-ab maxi :min state player decision-vec alpha beta max-depth))
+          (maxi [state alpha beta decision-vec]
+            (mmf-ab mini :max state player decision-vec alpha beta max-depth))]
+    (maxi initial-state
+          #?(:clj Double/NEGATIVE_INFINITY :cljs Number/NEGATIVE_INFINITY)
+          #?(:clj Double/POSITIVE_INFINITY :cljs Number/POSITIVE_INFINITY) [])))
 
 (defn breadth-first-search [{:keys [player] :as state} depth]
   (let [m (->> (lookahead state depth)
